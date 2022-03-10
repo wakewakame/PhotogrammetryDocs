@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<title>8 point algorithm demo</title>
+		<script type="module">
+			import renderer from "./renderer.js";
+
+			const main = () => {
+				const points = [
+					[-1, -1, -1],
+					[+1, -1, -1],
+					[+1, +1, -1],
+					[-1, +1, -1],
+					[-1, -1, +1],
+					[+1, -1, +1],
+					[+1, +1, +1],
+					[-1, +1, +1],
+				];
+				const cam1  = document.getElementById("cam1");
+				const cam2  = document.getElementById("cam2");
+				const world = document.getElementById("world");
+				const points_cam1  = new renderer.Points3D(cam1 , points);
+				const points_cam2  = new renderer.Points3D(cam2 , points);
+				const points_world = new renderer.Points3D(world, points);
+				points_cam1.addOtherCamera([cam2]);
+				points_cam2.addOtherCamera([cam1]);
+				points_world.addOtherCamera([cam1, cam2]);
+			};
+
+			window.addEventListener("DOMContentLoaded", () => {
+				main();
+			});
+		</script>
+		<style>
+			body {
+				background: #E4E6E5;
+			}
+			canvas {
+				background: #E4E6E5;
+				border: 2px solid #77A9B0;
+				border-radius: 16px;
+				margin: 4px;
+				width: 480px;
+			}
+		</style>
+	</head>
+	<body>
+		<div>
+			<canvas id="cam1"  width="640" height="480"></canvas>
+			<canvas id="cam2"  width="640" height="480"></canvas>
+			<canvas id="world" width="640" height="480"></canvas>
+		</div>
+	</body>
+</html>
