@@ -7,6 +7,7 @@
 		<title>8 point algorithm demo</title>
 		<script type="module">
 			import renderer from "./renderer.js";
+			import vector from "./vector.js";
 
 			const main = () => {
 				const points = [
@@ -19,6 +20,12 @@
 					[+1, +1, +1],
 					[-1, +1, +1],
 				];
+				for(let i = 0; i < 0; i++) {
+					const x = Math.random() * 2 - 1;
+					const y = Math.random() * 2 - 1;
+					const z = Math.random() * 2 - 1;
+					points.push([x, y, z]);
+				}
 				const cam1  = document.getElementById("cam1");
 				const cam2  = document.getElementById("cam2");
 				const world = document.getElementById("world");
@@ -28,6 +35,20 @@
 				points_cam1.addOtherCamera([cam2]);
 				points_cam2.addOtherCamera([cam1]);
 				points_world.addOtherCamera([cam1, cam2]);
+
+				const calc = () => {
+					const body = JSON.stringify({
+						"cam1": vector.matToOpencvIntrinsics(points_cam1.r3d.matrix.projection),
+						"cam2": vector.matToOpencvIntrinsics(points_cam2.r3d.matrix.projection),
+						"points1": points_cam1.r3d.worldToScreen(points).map(point => [point.x, point.y]),
+						"points2": points_cam2.r3d.worldToScreen(points).map(point => [point.x, point.y]),
+					});
+					fetch("/8pt", {method: "POST", body: body})
+						.then(res => res.json())
+						.then(data => console.log(data))
+				};
+				cam1.addEventListener("mouseup", () => { calc(); });
+				cam2.addEventListener("mouseup", () => { calc(); });
 			};
 
 			window.addEventListener("DOMContentLoaded", () => {

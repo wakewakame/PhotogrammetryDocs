@@ -12,10 +12,10 @@ const Renderer3D = class {
 
 		this.matrix = {
 			dataset: this.canvas.dataset,
-			get view() { return DOMMatrix.fromMatrix(JSON.parse(this.dataset.view_matrix)); },
-			set view(matrix) { this.dataset.view_matrix = JSON.stringify(matrix); },
-			get projection() { return DOMMatrix.fromMatrix(JSON.parse(this.dataset.projection_matrix)); },
-			set projection(matrix) { this.dataset.projection_matrix = JSON.stringify(matrix); },
+			get view() { return vector.matFromJson(this.dataset.view_matrix); },
+			set view(matrix) { this.dataset.view_matrix = vector.matToJson(matrix); },
+			get projection() { return vector.matFromJson(this.dataset.projection_matrix); },
+			set projection(matrix) { this.dataset.projection_matrix = vector.matToJson(matrix); },
 		};
 		this.matrix.view = new DOMMatrix([
 			1, 0, 0 , 0,
@@ -104,8 +104,8 @@ const Points3D = class {
 		this.observer = new MutationObserver((mutationsList, observer) => {
 			for(const mutation of mutationsList) {
 				const id = mutation.target.id;
-				const view = DOMMatrix.fromMatrix(JSON.parse(mutation.target.dataset.view_matrix));
-				const projection = DOMMatrix.fromMatrix(JSON.parse(mutation.target.dataset.projection_matrix));
+				const view = vector.matFromJson(mutation.target.dataset.view_matrix);
+				const projection = vector.matFromJson(mutation.target.dataset.projection_matrix);
 				const view_ = vector.normalizeScale(view.inverse());
 				this.otherCameras.set(id, {
 					viewInverse: view_,
@@ -122,8 +122,8 @@ const Points3D = class {
 		for(const canvas_element of canvas_elements) {
 			this.observer.observe(canvas_element, config);
 			const id = canvas_element.id;
-			const view = DOMMatrix.fromMatrix(JSON.parse(canvas_element.dataset.view_matrix));
-			const projection = DOMMatrix.fromMatrix(JSON.parse(canvas_element.dataset.projection_matrix));
+			const view = vector.matFromJson(canvas_element.dataset.view_matrix);
+			const projection = vector.matFromJson(canvas_element.dataset.projection_matrix);
 			this.otherCameras.set(id, {
 				viewInverse: vector.normalizeScale(view.inverse()),
 				projection: projection,

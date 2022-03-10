@@ -42,9 +42,28 @@ const normalizeScale = (matrix) => {
 	return matrix.scale(scale, scale, scale);
 };
 
+const matToJson = (matrix) => {
+	return JSON.stringify(Array.from(matrix.toFloat64Array()));
+};
+
+const matFromJson = (json) => {
+	return DOMMatrix.fromFloat64Array(new Float64Array(JSON.parse(json)));
+};
+
+const matToOpencvIntrinsics = (projection) => {
+	return [
+		[projection.m11, 0, projection.m31],
+		[0, projection.m22, projection.m32],
+		[0, 0, 1]
+	];
+};
+
 export default {
 	length: length,
 	normal: normal,
 	rotate: rotate,
 	normalizeScale: normalizeScale,
+	matToJson: matToJson,
+	matFromJson: matFromJson,
+	matToOpencvIntrinsics: matToOpencvIntrinsics,
 };
