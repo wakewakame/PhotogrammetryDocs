@@ -30,6 +30,7 @@ const rotate = (axis, rad) => {
 	]);
 };
 
+// 平行移動行列x拡大縮小行列x回転行列 を 平行移動行列x回転行列 へ変換する関数
 const normalizeScale = (matrix) => {
 	const determinant3x3 =
 		matrix.m11 * matrix.m22 * matrix.m33 +
@@ -39,7 +40,12 @@ const normalizeScale = (matrix) => {
 		matrix.m21 * matrix.m12 * matrix.m33 -
 		matrix.m11 * matrix.m32 * matrix.m23;
 	const scale = 1.0 / Math.pow(determinant3x3, 1/3);
-	return matrix.scale(scale, scale, scale);
+	return new DOMMatrix([
+		matrix.m11 * scale, matrix.m12 * scale, matrix.m13 * scale, 0,
+		matrix.m21 * scale, matrix.m22 * scale, matrix.m23 * scale, 0,
+		matrix.m31 * scale, matrix.m32 * scale, matrix.m33 * scale, 0,
+		matrix.m41 * scale, matrix.m42 * scale, matrix.m43 * scale, 1
+	]);
 };
 
 const matToJson = (matrix) => {

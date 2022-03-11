@@ -25,18 +25,14 @@ const Model = class {
 	}
 };
 
-const CameraModel = class extends Model {
-	constructor(canvas, color = "#77A9B0") {
+const VirtualCameraModel = class extends Model {
+	constructor(width, height, color = "#CCA990") {
 		super();
-		this.canvas = canvas;
-		this.context2d = canvas.getContext("2d");
-		this.color = color;
-		this.scale = 4.0;
-
-		const f = (canvas.width + canvas.height) / 2.0;
-		const cx = canvas.width / 2.0;
-		const cy = canvas.height / 2.0;
-
+		this.width = width;
+		this.height = height;
+		const f = (this.width + this.height) / 2.0;
+		const cx = this.width / 2.0;
+		const cy = this.height / 2.0;
 		this.view = new DOMMatrix([
 			1, 0, 0 , 0,
 			0, 1, 0 , 0,
@@ -49,6 +45,7 @@ const CameraModel = class extends Model {
 			cx, cy, 1, 1,
 			0 , 0 , 0, 0 
 		]);
+		this.color = color;
 	}
 	worldToScreen(points) {
 		return points
@@ -56,6 +53,35 @@ const CameraModel = class extends Model {
 			.map(point => this.view.transformPoint(point))
 			.map(point => this.projection.transformPoint(point))
 			.map(point => { point.x /= point.w; point.y /= point.w; return point; });
+	}
+	draw(cam) {
+		if (cam === this) { return; }
+		const width = 1;
+		const height = this.height * width / this.width;
+		const focalLength = -this.projection.m11 * width / this.width;
+		const viewInverse = vector.normalizeScale(this.view).inverse();
+		const center = viewInverse.transformPoint(new DOMPoint(0.0, 0.0, 0.0, 1.0));
+		const p1 = viewInverse.transformPoint(new DOMPoint(-width, -height, -focalLength));  // left top
+		const p2 = viewInverse.transformPoint(new DOMPoint(+width, -height, -focalLength));  // right top
+		const p3 = viewInverse.transformPoint(new DOMPoint(+width, +height, -focalLength));  // right bottom
+		const p4 = viewInverse.transformPoint(new DOMPoint(-width, +height, -focalLength));  // left bottom
+		cam.line3d(center.x, center.y, center.z, p1.x, p1.y, p1.z, 2, this.color);
+		cam.line3d(center.x, center.y, center.z, p2.x, p2.y, p2.z, 2, this.color);
+		cam.line3d(center.x, center.y, center.z, p3.x, p3.y, p3.z, 2, this.color);
+		cam.line3d(center.x, center.y, center.z, p4.x, p4.y, p4.z, 2, this.color);
+		cam.line3d(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, 2, this.color);
+		cam.line3d(p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, 2, this.color);
+		cam.line3d(p3.x, p3.y, p3.z, p4.x, p4.y, p4.z, 2, this.color);
+		cam.line3d(p4.x, p4.y, p4.z, p1.x, p1.y, p1.z, 2, this.color);
+	}
+};
+
+const CameraModel = class extends VirtualCameraModel {
+	constructor(canvas, color = "#77A9B0") {
+		super(canvas.width, canvas.height, color);
+		this.canvas = canvas;
+		this.context2d = canvas.getContext("2d");
+		this.scale = 4.0;
 	}
 	clear() { this.context2d.clearRect(0, 0, this.canvas.width, this.canvas.height); }
 	point2d(x, y, hex = "#77A9B0") {
@@ -105,26 +131,6 @@ const CameraModel = class extends Model {
 				model.draw(this);
 			});
 		}, 0);
-	}
-	draw(cam) {
-		if (cam === this) { return; }
-		const width = 1;
-		const height = this.canvas.height * width / this.canvas.width;
-		const focalLength = -this.projection.m11 * width / this.canvas.width;
-		const viewInverse = vector.normalizeScale(this.view.inverse());
-		const center = viewInverse.transformPoint(new DOMPoint(0.0, 0.0, 0.0, 1.0));
-		const p1 = viewInverse.transformPoint(new DOMPoint(-width, -height, -focalLength));  // left top
-		const p2 = viewInverse.transformPoint(new DOMPoint(+width, -height, -focalLength));  // right top
-		const p3 = viewInverse.transformPoint(new DOMPoint(+width, +height, -focalLength));  // right bottom
-		const p4 = viewInverse.transformPoint(new DOMPoint(-width, +height, -focalLength));  // left bottom
-		cam.line3d(center.x, center.y, center.z, p1.x, p1.y, p1.z, 2, this.color);
-		cam.line3d(center.x, center.y, center.z, p2.x, p2.y, p2.z, 2, this.color);
-		cam.line3d(center.x, center.y, center.z, p3.x, p3.y, p3.z, 2, this.color);
-		cam.line3d(center.x, center.y, center.z, p4.x, p4.y, p4.z, 2, this.color);
-		cam.line3d(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, 2, this.color);
-		cam.line3d(p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, 2, this.color);
-		cam.line3d(p3.x, p3.y, p3.z, p4.x, p4.y, p4.z, 2, this.color);
-		cam.line3d(p4.x, p4.y, p4.z, p1.x, p1.y, p1.z, 2, this.color);
 	}
 };
 
@@ -194,6 +200,7 @@ const PointsModel = class extends Model {
 export default {
 	Scene: Scene,
 	Model: Model,
+	VirtualCameraModel: VirtualCameraModel,
 	CameraModel: CameraModel,
 	CameraModelWithMouse: CameraModelWithMouse,
 	AxisModel: AxisModel,
