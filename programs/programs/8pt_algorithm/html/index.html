@@ -36,19 +36,47 @@
 				points_cam2.addOtherCamera([cam1]);
 				points_world.addOtherCamera([cam1, cam2]);
 
-				const calc = () => {
+				const calc = async () => {
+					// 回転行列と平行移動ベクトル、点群の三次元座標を計算
 					const body = JSON.stringify({
 						"cam1": vector.matToOpencvIntrinsics(points_cam1.r3d.matrix.projection),
 						"cam2": vector.matToOpencvIntrinsics(points_cam2.r3d.matrix.projection),
 						"points1": points_cam1.r3d.worldToScreen(points).map(point => [point.x, point.y]),
 						"points2": points_cam2.r3d.worldToScreen(points).map(point => [point.x, point.y]),
 					});
-					fetch("/8pt", {method: "POST", body: body})
-						.then(res => res.json())
-						.then(data => console.log(data))
+					const response = await fetch("/8pt", {method: "POST", body: body});
+					const data = await response.json();
+					if (data === null) { return; }
+					const Rt_ = DOMMatrix.fromFloat64Array(new Float64Array([
+						data["Rt"][0][0], data["Rt"][1][0], data["Rt"][2][0], 0,
+						data["Rt"][0][1], data["Rt"][1][1], data["Rt"][2][1], 0,
+						data["Rt"][0][2], data["Rt"][1][2], data["Rt"][2][2], 0,
+						data["Rt"][0][3], data["Rt"][1][3], data["Rt"][2][3], 1
+					]));
+					let points_ = data["points"];
+
+					// 現実の回転行列と平行移動ベクトルを計算
+					const Rt = points_cam2.r3d.matrix.view.multiply(points_cam1.r3d.matrix.view.inverse());
+
+					// Rt_とRtの平行移動成分の長さから、Rt_とpoints_のスケールをRtとpointsに合わせる
+					const Rt_length_ = Math.sqrt(Rt_.m41 * Rt_.m41 + Rt_.m42 * Rt_.m42 + Rt_.m43 * Rt_.m43);
+					const Rt_length = Math.sqrt(Rt.m41 * Rt.m41 + Rt.m42 * Rt.m42 + Rt.m43 * Rt.m43);
+					const scale = Rt_length / Rt_length_;
+					Rt_.m41 *= scale; Rt_.m42 *= scale; Rt_.m43 *= scale;
+					points_ = points_.map(([x, y, z]) => [x * scale, y * scale, z * scale]);
+
+					// points_をcam1座標系から世界座標系へ変形
+					points_ = points_.map(([x, y, z]) => {
+						let point = new DOMPoint(x, y, z, 1);
+						point = points_cam1.r3d.matrix.view.inverse().transformPoint(point);
+						return [point.x, point.y, point.z, 1];
+					});
+
+					console.log(points);
+					console.log(points_);
 				};
-				cam1.addEventListener("mouseup", () => { calc(); });
-				cam2.addEventListener("mouseup", () => { calc(); });
+				cam1.addEventListener("mouseup", async () => { calc(); });
+				cam2.addEventListener("mouseup", async () => { calc(); });
 			};
 
 			window.addEventListener("DOMContentLoaded", () => {
