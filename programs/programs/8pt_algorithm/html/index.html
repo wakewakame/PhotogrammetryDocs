@@ -26,23 +26,31 @@
 					const z = Math.random() * 2 - 1;
 					points.push([x, y, z]);
 				}
-				const cam1  = document.getElementById("cam1");
-				const cam2  = document.getElementById("cam2");
-				const world = document.getElementById("world");
-				const points_cam1  = new renderer.Points3D(cam1 , points);
-				const points_cam2  = new renderer.Points3D(cam2 , points);
-				const points_world = new renderer.Points3D(world, points);
-				points_cam1.addOtherCamera([cam2]);
-				points_cam2.addOtherCamera([cam1]);
-				points_world.addOtherCamera([cam1, cam2]);
+
+				const cam1_canvas = document.getElementById("cam1");
+				const cam2_canvas = document.getElementById("cam2");
+				const preview_canvas = document.getElementById("preview");
+
+				const cam1_cam = new renderer.CameraModelWithMouse(cam1_canvas);
+				const cam2_cam = new renderer.CameraModelWithMouse(cam2_canvas);
+				const preview_cam = new renderer.CameraModelWithMouse(preview_canvas, "#00000000");
+				const axis_model = new renderer.AxisModel();
+				const points_model = new renderer.PointsModel("#77A9B0", points);
+
+				const scene = new renderer.Scene();
+				scene.addModel(cam1_cam);
+				scene.addModel(cam2_cam);
+				scene.addModel(preview_cam);
+				scene.addModel(axis_model);
+				scene.addModel(points_model);
 
 				const calc = async () => {
 					// 回転行列と平行移動ベクトル、点群の三次元座標を計算
 					const body = JSON.stringify({
-						"cam1": vector.matToOpencvIntrinsics(points_cam1.r3d.matrix.projection),
-						"cam2": vector.matToOpencvIntrinsics(points_cam2.r3d.matrix.projection),
-						"points1": points_cam1.r3d.worldToScreen(points).map(point => [point.x, point.y]),
-						"points2": points_cam2.r3d.worldToScreen(points).map(point => [point.x, point.y]),
+						"cam1": vector.matToOpencvIntrinsics(cam1_cam.projection),
+						"cam2": vector.matToOpencvIntrinsics(cam2_cam.projection),
+						"points1": cam1_cam.worldToScreen(points).map(point => [point.x, point.y]),
+						"points2": cam2_cam.worldToScreen(points).map(point => [point.x, point.y]),
 					});
 					const response = await fetch("/8pt", {method: "POST", body: body});
 					const data = await response.json();
@@ -56,7 +64,7 @@
 					let points_ = data["points"];
 
 					// 現実の回転行列と平行移動ベクトルを計算
-					const Rt = points_cam2.r3d.matrix.view.multiply(points_cam1.r3d.matrix.view.inverse());
+					const Rt = cam2_cam.view.multiply(cam1_cam.view.inverse());
 
 					// Rt_とRtの平行移動成分の長さから、Rt_とpoints_のスケールをRtとpointsに合わせる
 					const Rt_length_ = Math.sqrt(Rt_.m41 * Rt_.m41 + Rt_.m42 * Rt_.m42 + Rt_.m43 * Rt_.m43);
@@ -68,15 +76,15 @@
 					// points_をcam1座標系から世界座標系へ変形
 					points_ = points_.map(([x, y, z]) => {
 						let point = new DOMPoint(x, y, z, 1);
-						point = points_cam1.r3d.matrix.view.inverse().transformPoint(point);
+						point = cam1_cam.view.inverse().transformPoint(point);
 						return [point.x, point.y, point.z, 1];
 					});
 
 					console.log(points);
 					console.log(points_);
 				};
-				cam1.addEventListener("mouseup", async () => { calc(); });
-				cam2.addEventListener("mouseup", async () => { calc(); });
+				cam1_canvas.addEventListener("mouseup", async () => { calc(); });
+				cam2_canvas.addEventListener("mouseup", async () => { calc(); });
 			};
 
 			window.addEventListener("DOMContentLoaded", () => {
@@ -98,9 +106,9 @@
 	</head>
 	<body>
 		<div>
-			<canvas id="cam1"  width="640" height="480"></canvas>
-			<canvas id="cam2"  width="640" height="480"></canvas>
-			<canvas id="world" width="640" height="480"></canvas>
+			<canvas id="cam1" width="640" height="480"></canvas>
+			<canvas id="cam2" width="640" height="480"></canvas>
+			<canvas id="preview" width="640" height="480"></canvas>
 		</div>
 	</body>
 </html>

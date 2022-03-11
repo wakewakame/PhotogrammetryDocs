@@ -1,29 +1,49 @@
 import vector from "./vector.js";
 
-const Renderer3D = class {
-	constructor(canvas) {
+const Scene = class {
+	constructor() {
+		this.models = new Array();
+	}
+	addModel(model) {
+		model.scene = this;
+		this.models.push(model);
+		this.update();
+		return model;
+	}
+	update() {
+		this.models.forEach(model => { model.update(); });
+	}
+};
+
+const Model = class {
+	constructor() {
+		this.scene = null;
+	}
+	update() {
+	}
+	draw(cam) {
+	}
+};
+
+const CameraModel = class extends Model {
+	constructor(canvas, color = "#77A9B0") {
+		super();
 		this.canvas = canvas;
 		this.context2d = canvas.getContext("2d");
+		this.color = color;
 		this.scale = 4.0;
 
 		const f = (canvas.width + canvas.height) / 2.0;
 		const cx = canvas.width / 2.0;
 		const cy = canvas.height / 2.0;
 
-		this.matrix = {
-			dataset: this.canvas.dataset,
-			get view() { return vector.matFromJson(this.dataset.view_matrix); },
-			set view(matrix) { this.dataset.view_matrix = vector.matToJson(matrix); },
-			get projection() { return vector.matFromJson(this.dataset.projection_matrix); },
-			set projection(matrix) { this.dataset.projection_matrix = vector.matToJson(matrix); },
-		};
-		this.matrix.view = new DOMMatrix([
+		this.view = new DOMMatrix([
 			1, 0, 0 , 0,
 			0, 1, 0 , 0,
 			0, 0, 1 , 0,
 			0, 0, 10, 1
 		]);
-		this.matrix.projection = new DOMMatrix([
+		this.projection = new DOMMatrix([
 			f , 0 , 0, 0,
 			0 , f , 0, 0,
 			cx, cy, 1, 1,
@@ -31,16 +51,11 @@ const Renderer3D = class {
 		]);
 	}
 	worldToScreen(points) {
-		const domPoints = [];
-		for(const point of points) {
-			let domPoint = new DOMPoint(point[0], point[1], point[2], 1);
-			domPoint = this.matrix.view.transformPoint(domPoint);
-			domPoint = this.matrix.projection.transformPoint(domPoint);
-			domPoint.x /= domPoint.w;
-			domPoint.y /= domPoint.w;
-			domPoints.push(domPoint);
-		}
-		return domPoints;
+		return points
+			.map(point => new DOMPoint(point[0], point[1], point[2], 1))
+			.map(point => this.view.transformPoint(point))
+			.map(point => this.projection.transformPoint(point))
+			.map(point => { point.x /= point.w; point.y /= point.w; return point; });
 	}
 	clear() { this.context2d.clearRect(0, 0, this.canvas.width, this.canvas.height); }
 	point2d(x, y, hex = "#77A9B0") {
@@ -83,12 +98,39 @@ const Renderer3D = class {
 		if (points.some(point => (point.w <= 0.0))) { return; }
 		this.line2d(points[0].x, points[0].y, points[1].x, points[1].y, width, hex);
 	}
+	update() {
+		setTimeout(() => {
+			this.clear();
+			this.scene.models.forEach(model => {
+				model.draw(this);
+			});
+		}, 0);
+	}
+	draw(cam) {
+		if (cam === this) { return; }
+		const width = 1;
+		const height = this.canvas.height * width / this.canvas.width;
+		const focalLength = -this.projection.m11 * width / this.canvas.width;
+		const viewInverse = vector.normalizeScale(this.view.inverse());
+		const center = viewInverse.transformPoint(new DOMPoint(0.0, 0.0, 0.0, 1.0));
+		const p1 = viewInverse.transformPoint(new DOMPoint(-width, -height, -focalLength));  // left top
+		const p2 = viewInverse.transformPoint(new DOMPoint(+width, -height, -focalLength));  // right top
+		const p3 = viewInverse.transformPoint(new DOMPoint(+width, +height, -focalLength));  // right bottom
+		const p4 = viewInverse.transformPoint(new DOMPoint(-width, +height, -focalLength));  // left bottom
+		cam.line3d(center.x, center.y, center.z, p1.x, p1.y, p1.z, 2, this.color);
+		cam.line3d(center.x, center.y, center.z, p2.x, p2.y, p2.z, 2, this.color);
+		cam.line3d(center.x, center.y, center.z, p3.x, p3.y, p3.z, 2, this.color);
+		cam.line3d(center.x, center.y, center.z, p4.x, p4.y, p4.z, 2, this.color);
+		cam.line3d(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, 2, this.color);
+		cam.line3d(p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, 2, this.color);
+		cam.line3d(p3.x, p3.y, p3.z, p4.x, p4.y, p4.z, 2, this.color);
+		cam.line3d(p4.x, p4.y, p4.z, p1.x, p1.y, p1.z, 2, this.color);
+	}
 };
 
-const Points3D = class {
-	constructor(canvas, points) {
-		this.r3d = new Renderer3D(canvas);
-		this.points = points;
+const CameraModelWithMouse = class extends CameraModel {
+	constructor(canvas, color = "#77A9B0") {
+		super(canvas, color);
 		canvas.addEventListener("mousedown", () => {
 			const callback = e => { this.mouseController(e); };
 			window.addEventListener("mousemove", callback);
@@ -98,99 +140,62 @@ const Points3D = class {
 			});
 			document.body.style["user-select"] = "none";
 		});
-		setTimeout(() => { this.draw(); }, 0);
-
-		this.otherCameras = new Map();
-		this.observer = new MutationObserver((mutationsList, observer) => {
-			for(const mutation of mutationsList) {
-				const id = mutation.target.id;
-				const view = vector.matFromJson(mutation.target.dataset.view_matrix);
-				const projection = vector.matFromJson(mutation.target.dataset.projection_matrix);
-				const view_ = vector.normalizeScale(view.inverse());
-				this.otherCameras.set(id, {
-					viewInverse: view_,
-					projection: projection,
-					width: mutation.target.width,
-					height: mutation.target.height,
-				});
-			}
-			this.draw();
-		});
-	}
-	addOtherCamera(canvas_elements) {
-		const config = { attributes: true, childList: false, subtree: false };
-		for(const canvas_element of canvas_elements) {
-			this.observer.observe(canvas_element, config);
-			const id = canvas_element.id;
-			const view = vector.matFromJson(canvas_element.dataset.view_matrix);
-			const projection = vector.matFromJson(canvas_element.dataset.projection_matrix);
-			this.otherCameras.set(id, {
-				viewInverse: vector.normalizeScale(view.inverse()),
-				projection: projection,
-				width: canvas_element.width,
-				height: canvas_element.height,
-			});
-		}
-	}
-	draw() {
-		const r3d = this.r3d;
-		r3d.clear();
-		r3d.line3d(0, 0, 0, 1, 0, 0, 4, "#FA8CBB");
-		r3d.line3d(0, 0, 0, 0, 1, 0, 4, "#73E4FA");
-		r3d.line3d(0, 0, 0, 0, 0, 1, 4, "#F9F098");
-		const screenPoints = r3d.worldToScreen(this.points).map(point => [point.x, point.y]);
-		for(const point of screenPoints) {
-			r3d.point2d(point[0], point[1], point[2], "#77A9B0");
-		}
-		for(const camera of this.otherCameras.values()) {
-			const width = 1;
-			const height = camera.height * width / camera.width;
-			const focalLength = -camera.projection.m11 * width / camera.width;
-			const center      = camera.viewInverse.transformPoint(new DOMPoint(0.0, 0.0, 0.0, 1.0));
-			const leftTop     = camera.viewInverse.transformPoint(new DOMPoint(-width, -height, -focalLength));
-			const rightTop    = camera.viewInverse.transformPoint(new DOMPoint(+width, -height, -focalLength));
-			const rightBottom = camera.viewInverse.transformPoint(new DOMPoint(+width, +height, -focalLength));
-			const leftBottom  = camera.viewInverse.transformPoint(new DOMPoint(-width, +height, -focalLength));
-			r3d.line3d(center.x, center.y, center.z, leftTop.x    , leftTop.y    , leftTop.z    , 2);
-			r3d.line3d(center.x, center.y, center.z, rightTop.x   , rightTop.y   , rightTop.z   , 2);
-			r3d.line3d(center.x, center.y, center.z, rightBottom.x, rightBottom.y, rightBottom.z, 2);
-			r3d.line3d(center.x, center.y, center.z, leftBottom.x , leftBottom.y , leftBottom.z , 2);
-			r3d.line3d(leftTop.x    , leftTop.y    , leftTop.z    , rightTop.x   , rightTop.y   , rightTop.z   , 2);
-			r3d.line3d(rightTop.x   , rightTop.y   , rightTop.z   , rightBottom.x, rightBottom.y, rightBottom.z, 2);
-			r3d.line3d(rightBottom.x, rightBottom.y, rightBottom.z, leftBottom.x , leftBottom.y , leftBottom.z , 2);
-			r3d.line3d(leftBottom.x , leftBottom.y , leftBottom.z , leftTop.x    , leftTop.y    , leftTop.z    , 2);
-		}
 	}
 	mouseController(e) {
-		const r3d = this.r3d;
-		const view = this.r3d.matrix.view;
-
 		if (e.buttons & 0b00001 === 1) {
 			if (e.shiftKey) {
-				view.m41 += e.movementX / 100.0;
-				view.m42 += e.movementY / 100.0;
+				this.view.m41 += e.movementX / 100.0;
+				this.view.m42 += e.movementY / 100.0;
 			}
 			else if (e.ctrlKey) {
 				const scale = 1.0 - e.movementY / 100.0;
-				view.m43 -= 10;
-				view.scaleSelf(scale, scale, scale);
-				view.m43 += 10;
+				this.view.m43 -= 10;
+				this.view.scaleSelf(scale, scale, scale);
+				this.view.m43 += 10;
 			}
 			else {
 				const move = new DOMPoint(-e.movementY, e.movementX, 0.0, 1.0);
 				const length = vector.length(move);
 				const rotate = vector.rotate(move, length / 100.0);
-				view.m43 -= 10;
-				view.preMultiplySelf(rotate);
-				view.m43 += 10;
+				this.view.m43 -= 10;
+				this.view.preMultiplySelf(rotate);
+				this.view.m43 += 10;
 			}
-			this.r3d.matrix.view = view;
-			this.draw();
+			this.scene.update();
 		}
+	}
+};
+
+const AxisModel = class extends Model {
+	draw(cam) {
+		cam.line3d(0, 0, 0, 1, 0, 0, 4, "#FA8CBB");
+		cam.line3d(0, 0, 0, 0, 1, 0, 4, "#73E4FA");
+		cam.line3d(0, 0, 0, 0, 0, 1, 4, "#F9F098");
+	}
+};
+
+const PointsModel = class extends Model {
+	constructor(color = "#77A9B0", points = new Array()) {
+		super();
+		this.points = points;
+		this.color = color;
+	}
+	draw(cam) {
+		for(const point of this.points) {
+			cam.point3d(point[0], point[1], point[2], this.color);
+		}
+	}
+	updatePoints(points) {
+		this.points = points;
+		this.scene.update();
 	}
 }
 
 export default {
-	Renderer3D: Renderer3D,
-	Points3D: Points3D,
+	Scene: Scene,
+	Model: Model,
+	CameraModel: CameraModel,
+	CameraModelWithMouse: CameraModelWithMouse,
+	AxisModel: AxisModel,
+	PointsModel: PointsModel,
 };
